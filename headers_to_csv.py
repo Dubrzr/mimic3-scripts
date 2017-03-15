@@ -1,143 +1,30 @@
 import copy
+import datetime
 import glob
 import numpy
-import pandas
 import os
-from file_utils import *
-import wfdb
+import pandas
+
 from wfdb_helpers import wfdb_read_header
-from datetime import datetime, timedelta
+
+from date_utils import *
+from file_utils import *
+from mimic_utils import *
 
 
 dir_path = 'data/mimic3wdb/'
 input_matched_csv = 'matched.csv'
-
 tmp_patients_file = 'patients_files.json'
+matched_df = pandas.read_csv(input_matched_csv, delimiter=',')
 
 output_record_csv = 'wfr.csv'
 output_entry_csv = 'wfe.csv'
-record_fields = {
-    'record_id': int,
-    'subject_id': int,
-    'starttime': str,
-    'endtime': str,
-    'starting_hadm': int,
-    'ending_hadm': int,
-    'starting_icustay': int,
-    'ending_icustay': int,
-    'hadmmatch': str,
-    'icumatch': str,
-    'rih': int,
-    'rii': int,
-    'hadm_overlap': float,
-    'icustay_overlap': float,
-    'comments': list
-}
-entry_fields = {
-    'record_id': int,
-    'segment_index': int,
-    'type': str,
-    'start_date': datetime,
-    'end_date': datetime,
-    'nsamp': int,
-    'nsig': int,
-    'fs': float,
-    'fmt': list,
-    'sampsperframe': list,
-    'skew': list,
-    'byteoffset': list,
-    'gain': list,
-    'units': list,
-    'baseline': list,
-    'initvalue': list,
-    'signame': list,
-    'comments': list
-}
-
-
-def get_patients(filename=tmp_patients_file):
-    if file_exists(filename):
-        return read_json(filename)
-
-    patients = {}
-
-    nb_patient = 0
-    nb_file = 0
-    for name in os.listdir(dir_path):
-        subdir_path = dir_path + name
-        patients[name] = []
-        nb_patient += 1
-        tmp = {}
-        for subname in os.listdir(subdir_path):
-            if subname.endswith('.json'):
-                continue
-            sn = subname[:-4]
-            if not sn in tmp:
-                patients[name].append(sn)
-                tmp[sn] = True
-        nb_file += len(patients[name])
-
-    print(nb_patient, 'patients,', nb_file, 'files')
-
-    write_json(filename, patients)
-    return patients
-
-
-def get_datetime(header, dt=None):
-    basetime = header['basetime']
-    basedate = header['basedate']
-    try:
-        if basedate != '':
-            day, month, year = [int(e) for e in basedate.split('/')]
-        else:
-            day, month, year = dt.day, dt.month, dt.year
-
-        tmp = basetime.split('.')
-        if len(tmp) == 1:
-            hms = tmp[0]
-            ms = 0
-        else:
-            hms, ms = tmp
-        tmp = hms.split(':')
-        if len(tmp) == 2:
-            if dt is None:
-                hour = 0
-            else:
-                hour = dt.hour
-            minutes, seconds = [int(e) for e in tmp]
-        else:
-            hour, minutes, seconds = [int(e) for e in tmp]
-        milliseconds = int(ms)
-        return datetime(
-            year=year,
-            month=month,
-            day=day,
-            hour=hour,
-            minute=minutes,
-            second=seconds,
-            microsecond=milliseconds*1000)
-    except ValueError as ve:
-        print(f'Error with basetime="{basetime}" and basedate="{basedate}": {ve}')
-        raise ve
-
-
-def get_timedelta_from_nb_samp(nsampseg, frequency):
-    seconds = nsampseg / frequency
-    s, ms = int(seconds), seconds % 1
-    return timedelta(seconds=s, milliseconds=ms)
-
-
-def str_from_datetime(dt):
-    return dt.strftime("%Y-%m-%d %H:%M:%S")
-
-
-matched_df = pandas.read_csv(input_matched_csv, delimiter=',')
 
 record_id = 0
-def create_csv(patients, sep=',', collecton_sep='|'):
+def create_csv(patients=None, sep=',', collecton_sep='|'):
     map_s_file = {}
     if patients is None:
-        patients = get_patients()
+        patients = get_patients(tmp_patients_file)
 
     # Create or overwrite output files
     wfr = open(output_record_csv, 'w+')
@@ -167,7 +54,7 @@ def create_csv(patients, sep=',', collecton_sep='|'):
                     except ValueError:
                         v = ''
 
-            if isinstance(v, datetime):
+            if isinstance(v, datetime.datetime):
                 v = str_from_datetime(v)
             elif isinstance(v, list):
                 v = collecton_sep.join([str(b) for b in v])
@@ -212,7 +99,6 @@ def create_csv(patients, sep=',', collecton_sep='|'):
                 tmp = s_file
             record_id = get_or_create_record(type_wn, patient, tmp, wfr, header['comments'])
             
-            start = get_datetime(header)
             if type_wn == 'n':
                 # Only a single .dat file
                 segment_index = -1
@@ -234,6 +120,8 @@ def create_csv(patients, sep=',', collecton_sep='|'):
             elif type_wn == 'w':
                 # Many .dat files, we need to iterate over each segment
                 
+                start = get_datetime(header)
+
                 nsampseg_from_start = 0
                 for i, segment in enumerate(header['filename']):
                     nsampseg = header['nsampseg'][i]
@@ -274,4 +162,4 @@ def create_csv(patients, sep=',', collecton_sep='|'):
                     segment_header['end_date'] = end_date
                     write_to(wfe, entry_fields, **segment_header)
 
-create_csv(None)
+create_csv()
