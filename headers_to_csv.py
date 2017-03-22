@@ -12,7 +12,7 @@ from file_utils import *
 from mimic_utils import *
 
 
-dir_path = 'data/mimic3wdb/'
+dir_path = 'data/mimic3wdb-200315/'
 input_matched_csv = 'matched.csv'
 tmp_patients_file = 'patients_files.json'
 matched_df = pandas.read_csv(input_matched_csv, delimiter=',')
@@ -78,7 +78,16 @@ def create_csv(patients=None, sep=',', collecton_sep='|'):
         assert int(matched_entry['subject_id']) == int(patient[1:])
         if 'comments' in matched_entry:
             del matched_entry['comments']
-        write_to(wfr, record_fields, **matched_entry, record_id=map_s_file[s_file], comments=comments)
+        start_date = datetime.datetime.strptime(matched_entry['starttime'].as_matrix()[0], '%Y-%m-%d %H:%M:%S')
+        end_date = datetime.datetime.strptime(matched_entry['endtime'].as_matrix()[0], '%Y-%m-%d %H:%M:%S')
+        write_to(wfr, 
+                 record_fields,
+                 **matched_entry,
+                 record_id=map_s_file[s_file],
+                 start_date=start_date,
+                 end_date=end_date,
+                 length_ms=(end_date - start_date).total_seconds() * 1000,
+                 comments=comments)
 
         return map_s_file[s_file]
 
@@ -97,6 +106,9 @@ def create_csv(patients=None, sep=',', collecton_sep='|'):
                 tmp = s_file[:-1]
             else:
                 tmp = s_file
+            
+            start_date_s_file = datetime.datetime.strptime(tmp[7:], '%Y-%m-%d-%H-%M')
+            
             record_id = get_or_create_record(type_wn, patient, tmp, wfr, header['comments'])
             
             if type_wn == 'n':
@@ -107,6 +119,10 @@ def create_csv(patients=None, sep=',', collecton_sep='|'):
 
                 # Extract datetime
                 start_date = get_datetime(header)
+
+                # Prefer the use of the date in the header filename if the date in the header contents is different
+                if start_date != start_date_s_file:
+                    start_date = start_date_s_file
                 end_date = start_date + get_timedelta_from_nb_samp(header['nsamp'], header['fs'])
 
                 # Write entry
@@ -115,6 +131,7 @@ def create_csv(patients=None, sep=',', collecton_sep='|'):
                 header['type'] = type_wn
                 header['start_date'] = start_date
                 header['end_date'] = end_date
+                header['length_ms'] = (end_date - start_date).total_seconds() * 1000
                 write_to(wfe, entry_fields, **header)
 
             elif type_wn == 'w':
@@ -160,6 +177,7 @@ def create_csv(patients=None, sep=',', collecton_sep='|'):
                     segment_header['type'] = type_wn
                     segment_header['start_date'] = start_date
                     segment_header['end_date'] = end_date
+                    segment_header['length_ms'] = (end_date - start_date).total_seconds() * 1000
                     write_to(wfe, entry_fields, **segment_header)
 
 create_csv()

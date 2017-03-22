@@ -10,8 +10,8 @@ sys.setrecursionlimit(100000)
 
 
 physioneturl = "https://physionet.org/physiobank/database/mimic3wdb/matched"
-db_file = 'mimic3wdb.json'
-output = 'data/mimic3wdb'
+db_file = 'mimic3wdb-170315.json'
+output = 'data/mimic3wdb-200315'
 
 create_folder(output)
 
@@ -45,7 +45,7 @@ def process_url(f, file_url, file_path):
     return f, h, s
 
 pool = multiprocessing.Pool(processes=16)
-def download_folder(name):
+def download_folder(name, only_hea=False):
     dir_path = output + '/' + name
 
     create_folder(dir_path)
@@ -97,7 +97,7 @@ size = 0
 for k in folders:
     start = datetime.datetime.now()
     print('Downloading {}...'.format(k), end='')
-    s, dl = download_folder(k)
+    s, dl = download_folder(k, True)
     elapsed = datetime.datetime.now() - start
     total_sec = elapsed.seconds + elapsed.microseconds / 1000000
     print(' Done! {} files downloaded/updated ({} in {}s: {}/s)'.format(
